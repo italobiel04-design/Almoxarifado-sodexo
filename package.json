@@ -1,0 +1,29 @@
+{
+  "name": "repo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://x-access-token:ghs_13473_eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRobmQiLCJjdHgiOiJjRVZCT0dzT2c0MXA4MDVxdWlKWUgyR2FhT1NQMTVmdk9SVWN6YUx2UEpQSllDazFKNndOUzZsMkRBIiwiZXhwIjoxNzkyOTUzODAyLCJpYXQiOjE3OTI5NTAyMDIsImlzcyI6ImdpdGh1YiIsImp0aSI6IjE0OTVmZDE5LWJmNWYtNDM5NC05OGMzLTFiNDk2ZjkyZGRiOSIsInZlciI6M30.DzxxJt4RcrjUZ9F_xT-BCfLziL20qQzr_IgXskv-6vTcfvQ_mSGg0SE0lGFp0HL3gp2uqjogasku-ksjPvFbgw@github.com/italobiel04-design/Almoxarifado-sodexo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/italobiel04-design/Almoxarifado-sodexo/issues"
+  },
+  "homepage": "https://github.com/italobiel04-design/Almoxarifado-sodexo#readme",
+  "dependencies": {
+    "@netlify/database": "^2.0.1",
+    "@netlify/functions": "^6.0.3",
+    "drizzle-orm": "^1.0.0-beta.22"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^1.0.0-beta.22"
+  }
+}
