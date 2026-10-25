@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Almoxarifado Sodexo - Gestão & Controle v4.0</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sodexo: {
+                            blue: '#0F2A4A',
+                            darkBlue: '#0A1C33',
+                            red: '#ED1C24',
+                            lightRed: '#FF4D4D',
+                            grayBg: '#F4F6F9'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- QR Code Libs (QRCode.js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- PDF Generation Libs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F4F6F9; }
+        .sidebar-item-active { background-color: #ED1C24; color: white; }
+        
+        /* Otimização de Impressão para Etiquetas de QR Code */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area { 
+                position: fixed; 
+                left: 50%; 
+                top: 50%; 
+                transform: translate(-50%, -50%);
+                width: 80mm; 
+                padding: 10mm;
+                border: 2px dashed #0F2A4A;
+                background: white;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="h-full flex flex-col">
+
+        <!-- SCREEN: LOGIN -->
+        <div id="screen-login" class="flex-1 flex items-center justify-center bg-sodexo-darkBlue p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border-t-8 border-sodexo-red">
+                <div class="p-8 text-center">
+                    <div class="flex justify-center items-center gap-2 mb-2">
+                        <span class="text-3xl font-extrabold text-sodexo-blue tracking-wider">SODEXO</span>
+                        <div class="w-3 h-3 bg-sodexo-red rounded-full"></div>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">SISTEMA DE ALMOXARIFADO</h2>
+                    <p class="text-sm text-gray-500 mt-1">Acesso Multiusuário Sincronizado</p>
+
+                    <form id="form-login" onsubmit="handleLogin(event)" class="mt-6 text-left space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Selecione o Perfil / Usuário</label>
+                            <select id="login-user-select" class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sodexo-red focus:outline-none" required>
+                                <option value="">Carregando usuários...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Senha de Acesso</label>
+                            <input type="password" id="login-password" placeholder="••••••••" class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sodexo-red focus:outline-none" required>
+                        </div>
+                        <button type="submit" class="w-full bg-sodexo-red hover:bg-red-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
+                            ENTRAR NO SISTEMA
+                        </button>
+                    </form>
+                    <div id="login-error" class="mt-4 text-xs text-sodexo-red font-semibold hidden">
+                        Senha incorreta ou usuário desativado!
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-8 py-3 text-center border-t text-xs text-gray-400">
+                    Sincronização em Tempo Real Ativa • Versão 3.9
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN: MAIN DASHBOARD -->
+        <div id="screen-dashboard" class="flex-1 flex overflow-hidden hidden">
+
+            <!-- SIDEBAR -->
+            <aside class="w-64 bg-sodexo-blue text-white flex flex-col flex-shrink-0 shadow-lg">
+                <div class="p-5 border-b border-gray-700 flex items-center justify-between">
+                    <div>
+                        <h1 class="font-black text-xl tracking-wider text-white">SODEXO</h1>
+                        <p class="text-xs text-sodexo-red font-semibold">ALMOXARIFADO CENTRAL v4.0</p>
+                    </div>
+                    <span id="user-badge" class="px-2 py-1 text-xs rounded bg-sodexo-red text-white font-bold">ADM</span>
+                </div>
+
+                <nav class="flex-1 overflow-y-auto p-4 space-y-1" id="sidebar-nav">
+                    <!-- Nav items injected dynamically -->
+                </nav>
+
+                <div class="p-4 border-t border-gray-700 bg-sodexo-darkBlue flex items-center justify-between">
+                    <div class="truncate">
+                        <p id="current-user-name" class="text-sm font-bold text-white truncate">Usuário</p>
+                        <p id="current-user-role" class="text-xs text-gray-400 truncate">Perfil</p>
+                    </div>
+                    <button onclick="logout()" title="Sair do Sistema" class="text-gray-400 hover:text-sodexo-red p-2 transition">
+                        <i class="fa-solid fa-right-from-bracket text-lg"></i>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- MAIN CONTENT AREA -->
+            <main class="flex-1 flex flex-col overflow-y-auto bg-sodexo-grayBg">
+                <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
+                    <h2 id="page-title" class="text-xl font-bold text-sodexo-blue">Dashboard e Relatórios</h2>
+                    <div class="flex items-center gap-3">
+                        <button onclick="exportPagePDF()" class="bg-sodexo-blue text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-sodexo-darkBlue transition flex items-center gap-2">
+                            <i class="fa-solid fa-file-pdf text-sodexo-red"></i> Exportar Relatório PDF
+                        </button>
+                    </div>
+                </header>
+
+                <div class="p-6 flex-1" id="main-content">
+
+                    <!-- NOTIFICAÇÕES AUTOMÁTICAS V4.0 (Atrasos > 12h & Estoque Mínimo) -->
+                    <div id="v4-smart-alerts" class="space-y-3 mb-6"></div>
+
+                    <!-- VIEW: GESTÃO / DASHBOARD & RELATÓRIOS -->
+                    <div id="view-gestao-dashboard" class="view-panel space-y-6">
+                        <div class="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border">
+                            <span class="text-sm font-bold text-sodexo-blue">Filtro Periódico:</span>
+                            <div class="flex gap-2">
+                                <button onclick="setDashboardFilter('semanal')" id="btn-filt-semanal" class="px-3 py-1 text-xs rounded-lg font-bold border border-sodexo-blue bg-sodexo-blue text-white">Semanal</button>
+                                <button onclick="setDashboardFilter('mensal')" id="btn-filt-mensal" class="px-3 py-1 text-xs rounded-lg font-bold border border-sodexo-blue text-sodexo-blue">Mensal</button>
+                                <button onclick="setDashboardFilter('anual')" id="btn-filt-anual" class="px-3 py-1 text-xs rounded-lg font-bold border border-sodexo-blue text-sodexo-blue">Anual</button>
+                            </div>
+                        </div>
+
+                        <!-- KPI Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-sodexo-blue">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Total Movimentações</p>
+                                <h3 id="kpi-mov-total" class="text-2xl font-black text-sodexo-blue mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-green-500">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Entradas de Materiais</p>
+                                <h3 id="kpi-entradas" class="text-2xl font-black text-green-600 mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-sodexo-red">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Saídas de Materiais</p>
+                                <h3 id="kpi-saidas" class="text-2xl font-black text-sodexo-red mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-yellow-500">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Empréstimos Ativos</p>
+                                <h3 id="kpi-emprestimos" class="text-2xl font-black text-yellow-600 mt-1">0</h3>
+                            </div>
+                        </div>
+
+                        <!-- Charts Section -->
+                        <div id="pdf-export-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-white p-6 rounded-xl border shadow-sm">
+                            <div>
+                                <h3 class="text-sm font-bold text-sodexo-blue mb-4">Consumo por Centro de Custo</h3>
+                                <div class="relative h-64"><canvas id="chartConsumoCC"></canvas></div>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-sodexo-blue mb-4">Entradas vs Saídas</h3>
+                                <div class="relative h-64"><canvas id="chartEntradaSaida"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: CADASTRO DE PRODUTOS -->
+                    <div id="view-produtos" class="view-panel hidden space-y-6">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-bold text-sodexo-blue">Catálogo de Produtos & Equipamentos</h3>
+                            <button onclick="openProductModal()" class="bg-sodexo-red hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center gap-2">
+                                <i class="fa-solid fa-plus"></i> Novo Item / Equipamento
+                            </button>
+                        </div>
+                        <div class="bg-white rounded-xl shadow border overflow-hidden">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-sodexo-blue text-white uppercase text-xs">
+                                    <tr>
+                                        <th class="p-3">Código (SKU)</th>
+                                        <th class="p-3">Nome / Descrição</th>
+                                        <th class="p-3">Tipo</th>
+                                        <th class="p-3">Estoque</th>
+                                        <th class="p-3">QR Code (Etiqueta)</th>
+                                        <th class="p-3 text-right">Opções</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-produtos-body" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: CENTRAL DE RH & EQUIPE -->
+                    <div id="view-rh" class="view-panel hidden space-y-6">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-bold text-sodexo-blue">Central de RH e Equipes</h3>
+                            <button onclick="openUserModal()" class="bg-sodexo-red hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow">
+                                + Novo Colaborador / Perfil
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-2 bg-white rounded-xl shadow border overflow-hidden">
+                                <div class="p-4 border-b bg-gray-50 font-bold text-sodexo-blue text-sm">Membros da Equipe & Registro Geral</div>
+                                <table class="w-full text-left text-sm">
+                                    <thead class="bg-gray-100 text-xs text-gray-600 uppercase">
+                                        <tr>
+                                            <th class="p-3">Nome</th>
+                                            <th class="p-3">Setor / Cargo</th>
+                                            <th class="p-3">Ocorrência / Doc</th>
+                                            <th class="p-3 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="table-rh-body" class="divide-y"></tbody>
+                                </table>
+                            </div>
+
+                            <div class="bg-white rounded-xl shadow border p-4 space-y-4">
+                                <h4 class="font-bold text-sodexo-blue text-sm border-b pb-2">Registro Rápido de Ocorrência / Documento</h4>
+                                <form id="form-rh-quick" onsubmit="handleRhSubmit(event)" class="space-y-3">
+                                    <input type="text" id="rh-colab-name" placeholder="Nome Completo" class="w-full border rounded p-2 text-sm" required>
+                                    <input type="text" id="rh-colab-setor" placeholder="Setor / Cargo" class="w-full border rounded p-2 text-sm" required>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 font-semibold mb-1">Atestado / Descrição do Documento</label>
+                                        <input type="text" id="rh-doc-desc" placeholder="Ex: Atestado 2 dias / Entrega EPI" class="w-full border rounded p-2 text-sm" required>
+                                    </div>
+                                    <button type="submit" class="w-full bg-sodexo-red text-white py-2 rounded text-sm font-bold hover:bg-red-700">Salvar Registro RH</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: CENTRO DE CUSTO & PERMISSÕES -->
+                    <div id="view-cc" class="view-panel hidden space-y-6">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-bold text-sodexo-blue">Gestão de Usuarios, Perfis & Permissões ADM</h3>
+                            <button onclick="openUserModal()" class="bg-sodexo-blue hover:bg-sodexo-darkBlue text-white px-4 py-2 rounded-lg text-sm font-bold shadow">
+                                + Adicionar Usuário / Perfil
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow border p-4 overflow-x-auto">
+                            <h4 class="font-bold text-sodexo-blue text-sm mb-4">Gerenciamento de Matriz de Acessos</h4>
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-sodexo-blue text-white text-xs uppercase">
+                                    <tr>
+                                        <th class="p-3">Usuário / Nome</th>
+                                        <th class="p-3">Perfil</th>
+                                        <th class="p-3 text-center">Permite Entrada/Saída</th>
+                                        <th class="p-3 text-center">Permite Pedidos</th>
+                                        <th class="p-3 text-center">Permite Empréstimos</th>
+                                        <th class="p-3 text-right">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-users-permissions" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: OPERAÇÕES -->
+                    <div id="view-operacoes" class="view-panel hidden space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-5 rounded-xl shadow border text-center space-y-4">
+                                <h3 class="font-bold text-sodexo-blue text-base"><i class="fa-solid fa-qrcode text-sodexo-red"></i> Leitura de QR Code</h3>
+                                <div id="qr-reader" class="w-full max-w-sm mx-auto bg-gray-100 rounded border h-64 flex items-center justify-center text-gray-400 text-xs overflow-hidden">
+                                    Câmera inativa
+                                </div>
+                                <div class="flex justify-center gap-2">
+                                    <button type="button" onclick="startScanner()" class="bg-sodexo-blue text-white px-4 py-2 rounded text-xs font-bold">Ativar Câmera</button>
+                                    <button type="button" onclick="stopScanner()" class="bg-gray-400 text-white px-4 py-2 rounded text-xs font-bold">Desativar</button>
+                                </div>
+                                <div id="qr-result" class="text-xs font-bold text-sodexo-blue"></div>
+                            </div>
+
+                            <div class="bg-white p-5 rounded-xl shadow border space-y-4">
+                                <h3 class="font-bold text-sodexo-blue text-base border-b pb-2">Registro de Entrada / Saída de Material</h3>
+                                <form id="form-movimentacao" onsubmit="handleMovimentacao(event)" class="space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-600 mb-1">Tipo de Operação</label>
+                                        <select id="mov-tipo" class="w-full border rounded p-2 text-sm" required>
+                                            <option value="ENTRADA">ENTRADA no Almoxarifado</option>
+                                            <option value="SAIDA">SAÍDA / Consumo</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-600 mb-1">Código ou Nome do Material</label>
+                                        <input type="text" id="mov-item-code" placeholder="Digite ou Escaneie o QR" class="w-full border rounded p-2 text-sm" required>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="block text-xs font-bold text-gray-600 mb-1">Quantidade</label>
+                                            <input type="number" id="mov-qtd" min="1" value="1" class="w-full border rounded p-2 text-sm" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-gray-600 mb-1">Centro de Custo</label>
+                                            <select id="mov-cc" class="w-full border rounded p-2 text-sm" required></select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full bg-sodexo-red text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 transition">
+                                        REGISTRAR MOVIMENTAÇÃO
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: EMPRÉSTIMOS -->
+                    <div id="view-emprestimos" class="view-panel hidden space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow border space-y-4">
+                            <div class="border-b pb-2 flex justify-between items-center">
+                                <h3 class="font-bold text-sodexo-blue text-lg">Empréstimo & Devolução de Equipamentos</h3>
+                                <span class="text-xs text-sodexo-red font-semibold">*Notificação Automática enviada ao ADM</span>
+                            </div>
+
+                            <form id="form-emprestimo" onsubmit="handleEmprestimo(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Nome do Solicitante</label>
+                                    <input type="text" id="emp-nome-solicitante" placeholder="Ex: Carlos Silva" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Setor / Andar</label>
+                                    <input type="text" id="emp-setor-andar" placeholder="Ex: Cozinha 2º Andar" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Responsável Almoxarifado</label>
+                                    <input type="text" id="emp-colab-almox" placeholder="Nome do Entregador" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Código do Equipamento (QR)</label>
+                                    <input type="text" id="emp-codigo-eq" placeholder="Escaneie ou digite" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Condição do Item</label>
+                                    <select id="emp-condicao" class="w-full border rounded p-2 text-sm" required>
+                                        <option value="Ótimo">Ótimo Estado</option>
+                                        <option value="Bom">Bom Estado</option>
+                                        <option value="Avariado">Com Avaria Leve</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="submit" class="w-full bg-sodexo-blue text-white py-2 rounded text-sm font-bold hover:bg-sodexo-darkBlue transition">
+                                        REGISTRAR EMPRÉSTIMO
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow border overflow-hidden">
+                            <div class="p-4 bg-gray-50 border-b font-bold text-sodexo-blue text-sm">Histórico de Equipamentos Emprestados</div>
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-sodexo-blue text-white text-xs uppercase">
+                                    <tr>
+                                        <th class="p-3">Cód Equipamento</th>
+                                        <th class="p-3">Solicitante</th>
+                                        <th class="p-3">Setor/Andar</th>
+                                        <th class="p-3">Entregue Por</th>
+                                        <th class="p-3">Status / Condição</th>
+                                        <th class="p-3 text-right">Ação Devolução</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-emprestimos-body" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: LAVANDERIA -->
+                    <div id="view-lavanderia" class="view-panel hidden space-y-6">
+                        <!-- KPI Cards Lavanderia com Divergências -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Peças na Lavanderia</p>
+                                <h3 id="kpi-lav-pendente" class="text-2xl font-black text-blue-600 mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-green-500">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Retornadas / Limpas</p>
+                                <h3 id="kpi-lav-limpas" class="text-2xl font-black text-green-600 mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-yellow-500">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Divergências de Qtd</p>
+                                <h3 id="kpi-lav-divergencias" class="text-2xl font-black text-yellow-600 mt-1">0</h3>
+                            </div>
+                            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm border-l-4 border-l-sodexo-red">
+                                <p class="text-xs font-bold text-gray-500 uppercase">Avariadas / Baixadas</p>
+                                <h3 id="kpi-lav-avariadas" class="text-2xl font-black text-sodexo-red mt-1">0</h3>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl shadow border space-y-4">
+                            <div class="border-b pb-2 flex justify-between items-center">
+                                <h3 class="font-bold text-sodexo-blue text-lg"><i class="fa-solid fa-shirt text-sodexo-red mr-2"></i>Controle da Lavanderia & Enxoval</h3>
+                                <button onclick="exportLavanderiaPDF()" class="bg-sodexo-red text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700 flex items-center gap-1">
+                                    <i class="fa-solid fa-file-pdf"></i> Relatório de Divergências Lavanderia
+                                </button>
+                            </div>
+
+                            <form id="form-lavanderia" onsubmit="handleLavanderiaSubmit(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Item / Peça de Vestuário</label>
+                                    <input type="text" id="lav-item" placeholder="Ex: Dólmã Branco / Toalha Banho" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Quantidade Enviada</label>
+                                    <input type="number" id="lav-qtd" min="1" value="1" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Centro de Custo / Setor</label>
+                                    <select id="lav-cc" class="w-full border rounded p-2 text-sm" required></select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Empresa de Lavanderia Contratada</label>
+                                    <input type="text" id="lav-fornecedor" placeholder="Ex: Lavanderia Industrial Sodexo" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Responsável pelo Envio</label>
+                                    <input type="text" id="lav-resp" placeholder="Nome do Responsável" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="submit" class="w-full bg-sodexo-blue text-white py-2 rounded text-sm font-bold hover:bg-sodexo-darkBlue transition">
+                                        REGISTRAR ENVIO PARA LAVANDERIA
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Tabela de Lavanderia -->
+                        <div class="bg-white rounded-xl shadow border overflow-x-auto">
+                            <div class="p-4 bg-gray-50 border-b font-bold text-sodexo-blue text-sm flex justify-between items-center">
+                                <span>Histórico e Recebimento de Lotes</span>
+                                <span class="text-xs text-sodexo-red font-semibold">* Sinalizador visual em destaque para recebimentos em quantidade menor</span>
+                            </div>
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-sodexo-blue text-white text-xs uppercase">
+                                    <tr>
+                                        <th class="p-3">Data Envio</th>
+                                        <th class="p-3">Peça / Enxoval</th>
+                                        <th class="p-3">Qtd Enviada</th>
+                                        <th class="p-3">Qtd Retornada</th>
+                                        <th class="p-3">Centro de Custo</th>
+                                        <th class="p-3">Lavanderia</th>
+                                        <th class="p-3">Status / Alerta</th>
+                                        <th class="p-3 text-right">Ação Recebimento</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-lavanderia-body" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: PEDIDOS -->
+                    <div id="view-pedidos" class="view-panel hidden space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow border space-y-4">
+                            <h3 class="font-bold text-sodexo-blue text-lg border-b pb-2">Fazer Pedido para Almoxarifado Matriz</h3>
+                            <form id="form-pedido-matriz" onsubmit="handlePedidoMatriz(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Centro de Custo Solicitante</label>
+                                    <input type="text" id="ped-cc-origem" class="w-full border rounded p-2 text-sm bg-gray-100" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Material Solicitado</label>
+                                    <input type="text" id="ped-item" placeholder="Descrição do Material" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 mb-1">Quantidade</label>
+                                    <input type="number" id="ped-qtd" min="1" value="1" class="w-full border rounded p-2 text-sm" required>
+                                </div>
+                                <div class="md:col-span-3 text-right">
+                                    <button type="submit" class="bg-sodexo-red text-white px-6 py-2 rounded text-sm font-bold hover:bg-red-700">ENVIAR PEDIDO DE SEPARAÇÃO</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow border overflow-hidden">
+                            <div class="p-4 bg-gray-50 border-b font-bold text-sodexo-blue text-sm">Fila de Pedidos para Separação</div>
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-gray-100 text-xs uppercase text-gray-600">
+                                    <tr>
+                                        <th class="p-3">Centro de Custo</th>
+                                        <th class="p-3">Item</th>
+                                        <th class="p-3">Qtd</th>
+                                        <th class="p-3">Status</th>
+                                        <th class="p-3 text-right">Ação Separação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-pedidos-body" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+
+    </div>
+
+    <!-- MODAL: MANUTENÇÃO DE USUÁRIO / RH E PERMISSÕES -->
+    <div id="modal-usuario" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-sodexo-blue text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-sm" id="modal-user-title">Novo Usuário / Perfil</h3>
+                <button type="button" onclick="closeUserModal()" class="text-white hover:text-sodexo-red text-lg">&times;</button>
+            </div>
+            <form id="form-cad-usuario" onsubmit="saveUser(event)" class="p-6 space-y-4">
+                <input type="hidden" id="user-id">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Nome Completo</label>
+                    <input type="text" id="user-nome" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Perfil de Acesso</label>
+                    <select id="user-perfil" class="w-full border rounded p-2 text-sm" required>
+                        <option value="GESTAO">GESTAO (Administrador)</option>
+                        <option value="COLABORADOR">COLABORADOR (Almoxarife/Operacional)</option>
+                        <option value="CENTRO_CUSTO">CENTRO_CUSTO (Solicitante/Obra/Setor)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Senha de Acesso</label>
+                    <input type="password" id="user-senha" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div class="border-t pt-3 space-y-2">
+                    <span class="block text-xs font-bold text-sodexo-blue uppercase">Permissões Específicas</span>
+                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="user-perm-es" class="rounded text-sodexo-red focus:ring-sodexo-red"> Entrada e Saída de Materiais
+                    </label>
+                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="user-perm-pedidos" class="rounded text-sodexo-red focus:ring-sodexo-red"> Fazer / Atender Pedidos
+                    </label>
+                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="user-perm-emp" class="rounded text-sodexo-red focus:ring-sodexo-red"> Empréstimo de Equipamentos
+                    </label>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button type="button" onclick="closeUserModal()" class="px-4 py-2 border rounded text-xs font-bold text-gray-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-sodexo-red text-white rounded text-xs font-bold hover:bg-red-700">Salvar Perfil</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: RECEBIMENTO DE LAVANDERIA COM CONFERÊNCIA -->
+    <div id="modal-receber-lavanderia" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-sodexo-blue text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-sm">Recebimento de Lote de Lavanderia</h3>
+                <button type="button" onclick="closeLavanderiaModal()" class="text-white hover:text-sodexo-red text-lg">&times;</button>
+            </div>
+            <form id="form-receber-lavanderia" onsubmit="confirmarRecebimentoLavanderia(event)" class="p-6 space-y-4">
+                <input type="hidden" id="lav-receber-id">
+                <div>
+                    <p id="lav-info-item" class="text-sm font-bold text-sodexo-blue"></p>
+                    <p id="lav-info-qtd-enviada" class="text-xs text-gray-500"></p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Quantidade Efetivamente Retornada</label>
+                    <input type="number" id="lav-qtd-retornada" min="0" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Resultado / Condição</label>
+                    <select id="lav-status-retorno" class="w-full border rounded p-2 text-sm" required>
+                        <option value="DEVOLVIDO_LIMPO">Retornado / Concluído</option>
+                        <option value="AVARIADO_DESCARTE">Com Peças Avariadas / Baixa</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Observação / Justificativa (Se houver divergência)</label>
+                    <textarea id="lav-obs" placeholder="Ex: Faltando 2 peças na entrega da lavanderia" class="w-full border rounded p-2 text-sm h-20"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button type="button" onclick="closeLavanderiaModal()" class="px-4 py-2 border rounded text-xs font-bold text-gray-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-sodexo-red text-white rounded text-xs font-bold hover:bg-red-700">Confirmar Recebimento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: MANUTENÇÃO DE PRODUTO -->
+    <div id="modal-produto" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-sodexo-blue text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-sm">Cadastrar / Editar Item</h3>
+                <button type="button" onclick="closeProductModal()" class="text-white hover:text-sodexo-red text-lg">&times;</button>
+            </div>
+            <form id="form-cad-produto" onsubmit="saveProduct(event)" class="p-6 space-y-4">
+                <input type="hidden" id="prod-id">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Código Único (SKU/QR)</label>
+                    <input type="text" id="prod-codigo" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Nome do Item / Equipamento</label>
+                    <input type="text" id="prod-nome" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Tipo de Registro</label>
+                    <select id="prod-tipo" class="w-full border rounded p-2 text-sm" required>
+                        <option value="CONSUMO">Material de Consumo</option>
+                        <option value="EQUIPAMENTO">Equipamento / Imobilizado</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Quantidade em Estoque</label>
+                    <input type="number" id="prod-qtd" min="0" value="0" class="w-full border rounded p-2 text-sm" required>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button type="button" onclick="closeProductModal()" class="px-4 py-2 border rounded text-xs font-bold text-gray-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-sodexo-red text-white rounded text-xs font-bold hover:bg-red-700">Salvar Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: GERADOR / IMPRESSÃO DE QR CODE -->
+    <div id="modal-qrcode" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 text-center space-y-4 max-w-sm w-full border-t-8 border-sodexo-red">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-sodexo-blue text-base flex items-center gap-2">
+                    <i class="fa-solid fa-qrcode text-sodexo-red"></i> Etiqueta QR Code
+                </h3>
+                <button type="button" onclick="closeQrModal()" class="text-gray-400 hover:text-sodexo-red text-xl">&times;</button>
+            </div>
+            
+            <div id="printable-area" class="p-4 bg-white border border-gray-200 rounded-xl flex flex-col items-center justify-center shadow-inner">
+                <div class="font-black text-sodexo-blue text-xs mb-2 tracking-widest uppercase">SODEXO ALMOXARIFADO</div>
+                <div id="qrcode-container" class="p-2 bg-white rounded border flex justify-center items-center"></div>
+                <p id="qr-label-code" class="text-sm font-mono font-black text-sodexo-blue mt-2"></p>
+                <p id="qr-label-name" class="text-xs text-gray-600 font-semibold truncate max-w-full px-2"></p>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="window.print()" class="flex-1 bg-sodexo-blue hover:bg-sodexo-darkBlue text-white py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-print"></i> Imprimir Etiqueta
+                </button>
+                <button type="button" onclick="closeQrModal()" class="flex-1 border border-gray-300 hover:bg-gray-100 text-gray-700 py-2.5 rounded-lg text-xs font-bold transition">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIREBASE & APPLICATION LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Config
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sodexo-almoxarifado-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo-app.firebaseapp.com",
+            projectId: "demo-app",
+            storageBucket: "demo-app.appspot.com",
+            messagingSenderId: "00000000000",
+            appId: "1:00000000000:web:00000000000"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // State
+        let currentUser = null;
+        let usersList = [];
+        let rhList = [];
+        let productsList = [];
+        let movimentacoesList = [];
+        let emprestimosList = [];
+        let pedidosList = [];
+        let lavanderiaList = [];
+        let currentFilterPeriod = 'semanal';
+        let html5QrScanner = null;
+        let chartConsumoInstance = null;
+        let chartEntradaSaidaInstance = null;
+
+        const getPublicCol = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
+
+        // Default initial users
+        const defaultUsers = [
+            { id: 'usr-adm', nome: 'Administrador SODEXO', perfil: 'GESTAO', senha: '123', permEntradaSaida: true, permPedidos: true, permEmprestimo: true },
+            { id: 'usr-colab1', nome: 'João Almoxarife (Colaborador)', perfil: 'COLABORADOR', senha: '123', permEntradaSaida: true, permPedidos: false, permEmprestimo: true },
+            { id: 'usr-cc-matriz', nome: 'Centro Custo - Matriz (Sede)', perfil: 'CENTRO_CUSTO', senha: '123', permEntradaSaida: true, permPedidos: true, permEmprestimo: true },
+            { id: 'usr-cc-obra', nome: 'Centro Custo - Operação Norte', perfil: 'CENTRO_CUSTO', senha: '123', permEntradaSaida: true, permPedidos: true, permEmprestimo: true }
+        ];
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.warn("Auth Fallback Active");
+            }
+            initSync();
+        });
+
+        function initSync() {
+            // Sync Users
+            onSnapshot(getPublicCol('usuarios'), (snap) => {
+                if (snap.empty) {
+                    defaultUsers.forEach(u => setDoc(doc(getPublicCol('usuarios'), u.id), u));
+                } else {
+                    usersList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    renderUsersSelect();
+                    renderUsersPermissionsTable();
+                    renderRhTable();
+                    populateCCOptions();
+                }
+            }, err => console.log('Users sync alert:', err));
+
+            // Sync RH Records
+            onSnapshot(getPublicCol('rh'), (snap) => {
+                rhList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderRhTable();
+            }, err => console.log('RH sync alert:', err));
+
+            // Sync Products
+            onSnapshot(getPublicCol('produtos'), (snap) => {
+                productsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderProductsTable();
+                checkSmartAlerts();
+            }, err => console.log('Products sync alert:', err));
+
+            // Sync Movimentações
+            onSnapshot(getPublicCol('movimentacoes'), (snap) => {
+                movimentacoesList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateDashboardCharts();
+            }, err => console.log('Mov sync alert:', err));
+
+            // Sync Empréstimos
+            onSnapshot(getPublicCol('emprestimos'), (snap) => {
+                emprestimosList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderEmprestimosTable();
+                updateDashboardCharts();
+                checkSmartAlerts();
+            }, err => console.log('Emp sync alert:', err));
+
+            // Sync Pedidos
+            onSnapshot(getPublicCol('pedidos'), (snap) => {
+                pedidosList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderPedidosTable();
+            }, err => console.log('Ped sync alert:', err));
+
+            // Sync Lavanderia
+            onSnapshot(getPublicCol('lavanderia'), (snap) => {
+                lavanderiaList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderLavanderiaTable();
+                updateLavanderiaKPIs();
+            }, err => console.log('Lavanderia sync alert:', err));
+        }
+
+        // V4.0: MOTOR DE ALERTAS INTELIGENTES (Atraso 12h + Estoque Mínimo)
+        function checkSmartAlerts() {
+            const alertContainer = document.getElementById('v4-smart-alerts');
+            if (!alertContainer) return;
+            alertContainer.innerHTML = '';
+
+            const now = Date.now();
+            const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+            let alertHtml = '';
+
+            // 1. Verificar ferramentas/equipamentos emprestados há mais de 12 horas sem devolução
+            emprestimosList.forEach(emp => {
+                if (emp.status === 'EMPRESTADO') {
+                    let timestamp = emp.timestamp || Date.parse(emp.dataEmprestimo?.split('/').reverse().join('-')) || (now - (15 * 3600 * 1000)); // Simula se criado em string legada
+                    // Se o empréstimo tiver mais de 12 horas
+                    if ((now - timestamp) > TWELVE_HOURS_MS) {
+                        alertHtml += `
+                            <div class="bg-red-50 border-l-4 border-sodexo-red p-4 rounded-xl shadow-sm flex items-start justify-between">
+                                <div class="flex items-start gap-3">
+                                    <i class="fa-solid fa-clock-rotate-left text-sodexo-red text-xl mt-0.5 animate-bounce"></i>
+                                    <div>
+                                        <h4 class="text-sm font-bold text-sodexo-blue">ALERTA DE FERRAMENTA NÃO ENTREGUE (> 12 HORAS)</h4>
+                                        <p class="text-xs text-gray-700 mt-0.5">Equipamento/Código: <strong class="text-sodexo-red">${emp.codigoEq}</strong> | Solicitante: <strong>${emp.solicitante}</strong> (${emp.setorAndar})</p>
+                                        <p class="text-xs text-gray-500 mt-1">Este empréstimo ultrapassou o limite de 12 horas sem registro de devolução.</p>
+                                    </div>
+                                </div>
+                                <button onclick="devolverEquipamento('${emp.id}')" class="bg-sodexo-red hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition">Cobrar / Devolver</button>
+                            </div>
+                        `;
+                    }
+                }
+            });
+
+            // 2. Verificar itens no estoque chegando no mínimo (Estoque <= 3 unidades)
+            productsList.forEach(prod => {
+                const qtdEstoque = Number(prod.qtd || 0);
+                if (qtdEstoque <= 3) {
+                    alertHtml += `
+                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-xl shadow-sm flex items-start justify-between">
+                            <div class="flex items-start gap-3">
+                                <i class="fa-solid fa-triangle-exclamation text-yellow-600 text-xl mt-0.5"></i>
+                                <div>
+                                    <h4 class="text-sm font-bold text-sodexo-blue">ESTOQUE MÍNIMO ATINGIDO</h4>
+                                    <p class="text-xs text-gray-700 mt-0.5">Item: <strong>${prod.nome}</strong> (SKU: <code>${prod.codigo}</code>)</p>
+                                    <p class="text-xs text-yellow-700 font-bold mt-1">Restam apenas <strong>${qtdEstoque} unidade(s)</strong> em estoque!</p>
+                                </div>
+                            </div>
+                            <span class="px-2.5 py-1 bg-yellow-200 text-yellow-800 rounded font-bold text-xs">Reposição Necessária</span>
+                        </div>
+                    `;
+                }
+            });
+
+            alertContainer.innerHTML = alertHtml;
+        }
+
+        function renderUsersSelect() {
+            const select = document.getElementById('login-user-select');
+            if (!select) return;
+            select.innerHTML = '<option value="">Selecione seu perfil de acesso...</option>';
+            usersList.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = `${u.nome} [${u.perfil}]`;
+                select.appendChild(opt);
+            });
+        }
+
+        // USER MANAGEMENT & PERMISSIONS
+        window.openUserModal = function (id = null) {
+            const modal = document.getElementById('modal-usuario');
+            modal.classList.remove('hidden');
+            if (id) {
+                const u = usersList.find(item => item.id === id);
+                if (!u) return;
+                document.getElementById('user-id').value = u.id;
+                document.getElementById('user-nome').value = u.nome;
+                document.getElementById('user-perfil').value = u.perfil;
+                document.getElementById('user-senha').value = u.senha || '123';
+                document.getElementById('user-perm-es').checked = !!u.permEntradaSaida;
+                document.getElementById('user-perm-pedidos').checked = !!u.permPedidos;
+                document.getElementById('user-perm-emp').checked = !!u.permEmprestimo;
+                document.getElementById('modal-user-title').textContent = 'Editar Usuário / Perfil';
+            } else {
+                document.getElementById('user-id').value = '';
+                document.getElementById('form-cad-usuario').reset();
+                document.getElementById('user-perm-es').checked = true;
+                document.getElementById('user-perm-pedidos').checked = true;
+                document.getElementById('user-perm-emp').checked = true;
+                document.getElementById('modal-user-title').textContent = 'Novo Usuário / Perfil';
+            }
+        };
+
+        window.closeUserModal = function () {
+            document.getElementById('modal-usuario').classList.add('hidden');
+        };
+
+        window.saveUser = async function (e) {
+            e.preventDefault();
+            const id = document.getElementById('user-id').value || 'usr-' + Date.now();
+            const data = {
+                nome: document.getElementById('user-nome').value,
+                perfil: document.getElementById('user-perfil').value,
+                senha: document.getElementById('user-senha').value,
+                permEntradaSaida: document.getElementById('user-perm-es').checked,
+                permPedidos: document.getElementById('user-perm-pedidos').checked,
+                permEmprestimo: document.getElementById('user-perm-emp').checked
+            };
+
+            await setDoc(doc(getPublicCol('usuarios'), id), data, { merge: true });
+            closeUserModal();
+        };
+
+        window.deleteUser = async function (id) {
+            if (window.confirm('Tem certeza que deseja excluir este usuário/perfil?')) {
+                await deleteDoc(doc(getPublicCol('usuarios'), id));
+            }
+        };
+
+        function renderUsersPermissionsTable() {
+            const tbody = document.getElementById('table-users-permissions');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            usersList.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-sodexo-blue">${u.nome}</td>
+                    <td class="p-3 text-xs"><span class="px-2 py-1 bg-gray-100 rounded font-bold text-sodexo-darkBlue">${u.perfil}</span></td>
+                    <td class="p-3 text-center">${u.permEntradaSaida ? '✅ Sim' : '❌ Não'}</td>
+                    <td class="p-3 text-center">${u.permPedidos ? '✅ Sim' : '❌ Não'}</td>
+                    <td class="p-3 text-center">${u.permEmprestimo ? '✅ Sim' : '❌ Não'}</td>
+                    <td class="p-3 text-right space-x-2">
+                        <button type="button" onclick="openUserModal('${u.id}')" class="text-blue-600 hover:text-blue-900 text-xs font-bold">Editar</button>
+                        ${u.id !== 'usr-adm' ? `<button type="button" onclick="deleteUser('${u.id}')" class="text-sodexo-red hover:text-red-900 text-xs font-bold">Excluir</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // RH & EQUIPES LISTING
+        window.handleRhSubmit = async function (e) {
+            e.preventDefault();
+            const id = 'rh-' + Date.now();
+            const data = {
+                nome: document.getElementById('rh-colab-name').value,
+                setor: document.getElementById('rh-colab-setor').value,
+                docDesc: document.getElementById('rh-doc-desc').value,
+                dataRegistro: new Date().toLocaleDateString('pt-BR')
+            };
+
+            await setDoc(doc(getPublicCol('rh'), id), data);
+            document.getElementById('form-rh-quick').reset();
+            window.alert('Registro de RH gravado com sucesso!');
+        };
+
+        window.deleteRhRecord = async function (id) {
+            if (window.confirm('Excluir este registro da central de RH?')) {
+                await deleteDoc(doc(getPublicCol('rh'), id));
+            }
+        };
+
+        function renderRhTable() {
+            const tbody = document.getElementById('table-rh-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            usersList.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-sodexo-blue">${u.nome}</td>
+                    <td class="p-3 text-xs"><span class="px-2 py-0.5 bg-blue-50 text-sodexo-blue rounded font-semibold">${u.perfil}</span></td>
+                    <td class="p-3 text-xs text-gray-500">Membro Ativo da Equipe</td>
+                    <td class="p-3 text-right">
+                        <button type="button" onclick="openUserModal('${u.id}')" class="text-blue-600 hover:text-blue-900 text-xs font-bold">Editar Perfil</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            rhList.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-gray-800">${r.nome}</td>
+                    <td class="p-3 text-xs">${r.setor}</td>
+                    <td class="p-3 text-xs text-sodexo-red font-semibold">${r.docDesc} (${r.dataRegistro})</td>
+                    <td class="p-3 text-right">
+                        <button type="button" onclick="deleteRhRecord('${r.id}')" class="text-sodexo-red hover:text-red-900 text-xs font-bold">Excluir</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // AUTHENTICATION LOGIC
+        window.handleLogin = function (e) {
+            e.preventDefault();
+            const userId = document.getElementById('login-user-select').value;
+            const pass = document.getElementById('login-password').value;
+            const errBox = document.getElementById('login-error');
+
+            const found = usersList.find(u => u.id === userId && u.senha === pass);
+            if (found) {
+                currentUser = found;
+                errBox.classList.add('hidden');
+                document.getElementById('screen-login').classList.add('hidden');
+                document.getElementById('screen-dashboard').classList.remove('hidden');
+
+                document.getElementById('current-user-name').textContent = currentUser.nome;
+                document.getElementById('current-user-role').textContent = `Perfil: ${currentUser.perfil}`;
+                document.getElementById('user-badge').textContent = currentUser.perfil;
+
+                setupNavigation();
+            } else {
+                errBox.classList.remove('hidden');
+            }
+        };
+
+        window.logout = function () {
+            currentUser = null;
+            document.getElementById('screen-login').classList.remove('hidden');
+            document.getElementById('screen-dashboard').classList.add('hidden');
+        };
+
+        function setupNavigation() {
+            const nav = document.getElementById('sidebar-nav');
+            nav.innerHTML = '';
+
+            const navItems = [];
+
+            if (currentUser.perfil === 'GESTAO') {
+                navItems.push({ id: 'gestao-dashboard', label: 'Relatórios & Gráficos', icon: 'fa-chart-pie', view: 'view-gestao-dashboard' });
+                navItems.push({ id: 'produtos', label: 'Cadastro de Itens/Equip', icon: 'fa-boxes-stacked', view: 'view-produtos' });
+                navItems.push({ id: 'rh', label: 'Central de RH & Equipe', icon: 'fa-users-gear', view: 'view-rh' });
+                navItems.push({ id: 'cc', label: 'Centros de Custo & Permissões', icon: 'fa-sitemap', view: 'view-cc' });
+                navItems.push({ id: 'operacoes', label: 'Operações / Entrada & Saída', icon: 'fa-arrow-right-arrow-left', view: 'view-operacoes' });
+                navItems.push({ id: 'emprestimos', label: 'Empréstimos de Equipamentos', icon: 'fa-handshake', view: 'view-emprestimos' });
+                navItems.push({ id: 'lavanderia', label: 'Gestão da Lavanderia', icon: 'fa-shirt', view: 'view-lavanderia' });
+                navItems.push({ id: 'pedidos', label: 'Separação de Pedidos', icon: 'fa-list-check', view: 'view-pedidos' });
+            } else if (currentUser.perfil === 'COLABORADOR') {
+                if (currentUser.permEntradaSaida) navItems.push({ id: 'operacoes', label: 'Entrada/Saída QR Code', icon: 'fa-qrcode', view: 'view-operacoes' });
+                if (currentUser.permEmprestimo) navItems.push({ id: 'emprestimos', label: 'Empréstimo de Equipamento', icon: 'fa-handshake', view: 'view-emprestimos' });
+                navItems.push({ id: 'lavanderia', label: 'Controle de Lavanderia', icon: 'fa-shirt', view: 'view-lavanderia' });
+            } else if (currentUser.perfil === 'CENTRO_CUSTO') {
+                navItems.push({ id: 'produtos', label: 'Cadastrar Item/Equipamento', icon: 'fa-boxes-stacked', view: 'view-produtos' });
+                if (currentUser.permEntradaSaida) navItems.push({ id: 'operacoes', label: 'Entradas e Saídas CC', icon: 'fa-arrow-right-arrow-left', view: 'view-operacoes' });
+                if (currentUser.permPedidos) navItems.push({ id: 'pedidos', label: 'Fazer Pedido Matriz', icon: 'fa-paper-plane', view: 'view-pedidos' });
+                if (currentUser.permEmprestimo) navItems.push({ id: 'emprestimos', label: 'Solicitar Empréstimo', icon: 'fa-handshake', view: 'view-emprestimos' });
+                navItems.push({ id: 'lavanderia', label: 'Enviar para Lavanderia', icon: 'fa-shirt', view: 'view-lavanderia' });
+            }
+
+            navItems.forEach((item, index) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-lg transition ${index === 0 ? 'sidebar-item-active' : 'text-gray-300 hover:bg-sodexo-darkBlue'}`;
+                btn.innerHTML = `<i class="fa-solid ${item.icon} w-5 text-center"></i> <span>${item.label}</span>`;
+                btn.onclick = () => switchView(item.view, btn);
+                nav.appendChild(btn);
+            });
+
+            if (navItems.length > 0) {
+                switchView(navItems[0].view, nav.children[0]);
+            }
+            populateCCOptions();
+        }
+
+        function switchView(viewId, activeBtn) {
+            document.querySelectorAll('.view-panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById(viewId).classList.remove('hidden');
+
+            document.querySelectorAll('#sidebar-nav button').forEach(b => {
+                b.classList.remove('sidebar-item-active');
+                b.classList.add('text-gray-300');
+            });
+            activeBtn.classList.add('sidebar-item-active');
+            activeBtn.classList.remove('text-gray-300');
+
+            if (viewId === 'view-gestao-dashboard') {
+                setTimeout(updateDashboardCharts, 100);
+            }
+        }
+
+        // PRODUCTS MANAGEMENT
+        window.openProductModal = function (id = null) {
+            const modal = document.getElementById('modal-produto');
+            modal.classList.remove('hidden');
+            if (id) {
+                const p = productsList.find(item => item.id === id);
+                if (!p) return;
+                document.getElementById('prod-id').value = p.id;
+                document.getElementById('prod-codigo').value = p.codigo;
+                document.getElementById('prod-nome').value = p.nome;
+                document.getElementById('prod-tipo').value = p.tipo;
+                document.getElementById('prod-qtd').value = p.qtd;
+            } else {
+                document.getElementById('prod-id').value = '';
+                document.getElementById('form-cad-produto').reset();
+            }
+        };
+
+        window.closeProductModal = function () {
+            document.getElementById('modal-produto').classList.add('hidden');
+        };
+
+        window.saveProduct = async function (e) {
+            e.preventDefault();
+            const id = document.getElementById('prod-id').value || 'prod-' + Date.now();
+            const data = {
+                codigo: document.getElementById('prod-codigo').value.trim(),
+                nome: document.getElementById('prod-nome').value.trim(),
+                tipo: document.getElementById('prod-tipo').value,
+                qtd: Number(document.getElementById('prod-qtd').value)
+            };
+            await setDoc(doc(getPublicCol('produtos'), id), data, { merge: true });
+            closeProductModal();
+        };
+
+        window.deleteProduct = async function (id) {
+            if (currentUser?.perfil === 'GESTAO') {
+                await deleteDoc(doc(getPublicCol('produtos'), id));
+            } else {
+                window.alert('Apenas o Administrador tem permissão para excluir!');
+            }
+        };
+
+        function renderProductsTable() {
+            const tbody = document.getElementById('table-produtos-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            productsList.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-sodexo-blue">${p.codigo}</td>
+                    <td class="p-3 font-semibold">${p.nome}</td>
+                    <td class="p-3"><span class="px-2 py-1 text-xs rounded font-bold ${p.tipo === 'EQUIPAMENTO' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">${p.tipo}</span></td>
+                    <td class="p-3 font-bold">${p.qtd}</td>
+                    <td class="p-3">
+                        <button type="button" onclick="showQrModal('${p.codigo}', '${p.nome.replace(/'/g, "\\'")}')" class="bg-sodexo-blue hover:bg-sodexo-darkBlue text-white px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 shadow">
+                            <i class="fa-solid fa-qrcode"></i> Gerar / Imprimir QR
+                        </button>
+                    </td>
+                    <td class="p-3 text-right space-x-2">
+                        <button type="button" onclick="openProductModal('${p.id}')" class="text-blue-600 hover:text-blue-900 text-xs font-bold">Editar</button>
+                        ${currentUser?.perfil === 'GESTAO' ? `<button type="button" onclick="deleteProduct('${p.id}')" class="text-sodexo-red hover:text-red-800 text-xs font-bold">Excluir</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // QR CODE GENERATION & PRINTING
+        window.showQrModal = function (code, name) {
+            const modal = document.getElementById('modal-qrcode');
+            modal.classList.remove('hidden');
+            const qrContainer = document.getElementById('qrcode-container');
+            qrContainer.innerHTML = '';
+            
+            try {
+                if (typeof QRCode !== 'undefined') {
+                    new QRCode(qrContainer, {
+                        text: String(code || 'SEM-CODIGO'),
+                        width: 140,
+                        height: 140,
+                        colorDark : "#0F2A4A",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                } else {
+                    qrContainer.innerHTML = `<p class="text-xs text-sodexo-red font-bold">Erro: Biblioteca QR não carregada.</p>`;
+                }
+            } catch (err) {
+                console.error("QR Generation error:", err);
+                qrContainer.innerHTML = `<p class="text-xs text-sodexo-red font-bold">Erro ao gerar QR Code.</p>`;
+            }
+
+            document.getElementById('qr-label-code').textContent = code;
+            document.getElementById('qr-label-name').textContent = name;
+        };
+
+        window.closeQrModal = function () {
+            document.getElementById('modal-qrcode').classList.add('hidden');
+        };
+
+        // QR SCANNER
+        window.startScanner = async function () {
+            try {
+                if (!html5QrScanner) {
+                    html5QrScanner = new Html5Qrcode("qr-reader");
+                }
+                await html5QrScanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 200, height: 200 } },
+                    (decodedText) => {
+                        const movInput = document.getElementById('mov-item-code');
+                        const empInput = document.getElementById('emp-codigo-eq');
+                        if (movInput) movInput.value = decodedText;
+                        if (empInput) empInput.value = decodedText;
+                        const resEl = document.getElementById('qr-result');
+                        if (resEl) resEl.textContent = `QR Lido: ${decodedText}`;
+                        stopScanner();
+                    },
+                    (errorMessage) => { }
+                );
+            } catch (err) {
+                console.warn("Scanner start error:", err);
+                const resEl = document.getElementById('qr-result');
+                if (resEl) resEl.textContent = "Erro ao acessar câmera (permissão negada ou HTTPS obrigatório).";
+            }
+        };
+
+        window.stopScanner = async function () {
+            if (html5QrScanner) {
+                try {
+                    await html5QrScanner.stop();
+                    html5QrScanner.clear();
+                } catch (err) {
+                    console.warn("Scanner stop warning:", err);
+                }
+                html5QrScanner = null;
+                const readerEl = document.getElementById('qr-reader');
+                if (readerEl) readerEl.innerHTML = 'Câmera inativa';
+            }
+        };
+
+        // MOVIMENTAÇÕES
+        window.handleMovimentacao = async function (e) {
+            e.preventDefault();
+            const code = document.getElementById('mov-item-code').value;
+            const tipo = document.getElementById('mov-tipo').value;
+            const qtd = Number(document.getElementById('mov-qtd').value);
+            const cc = document.getElementById('mov-cc').value;
+
+            const product = productsList.find(p => p.codigo === code || p.nome.toLowerCase() === code.toLowerCase());
+
+            if (product) {
+                const newQtd = tipo === 'ENTRADA' ? product.qtd + qtd : Math.max(0, product.qtd - qtd);
+                await updateDoc(doc(getPublicCol('produtos'), product.id), { qtd: newQtd });
+            }
+
+            const movId = 'mov-' + Date.now();
+            await setDoc(doc(getPublicCol('movimentacoes'), movId), {
+                codigoItem: code,
+                tipo: tipo,
+                qtd: qtd,
+                centroCusto: cc,
+                data: new Date().toISOString()
+            });
+
+            document.getElementById('form-movimentacao').reset();
+            window.alert('Movimentação registrada com sucesso!');
+        };
+
+        // EMPRÉSTIMOS DE EQUIPAMENTOS
+        window.handleEmprestimo = async function (e) {
+            e.preventDefault();
+            const id = 'emp-' + Date.now();
+            const data = {
+                solicitante: document.getElementById('emp-nome-solicitante').value,
+                setorAndar: document.getElementById('emp-setor-andar').value,
+                colaboradorAlmox: document.getElementById('emp-colab-almox').value,
+                codigoEq: document.getElementById('emp-codigo-eq').value,
+                condicao: document.getElementById('emp-condicao').value,
+                status: 'EMPRESTADO',
+                timestamp: Date.now(), // Salva o carimbo exato em ms para o cálculo de 12 horas
+                dataEmprestimo: new Date().toLocaleDateString('pt-BR')
+            };
+
+            await setDoc(doc(getPublicCol('emprestimos'), id), data);
+            document.getElementById('form-emprestimo').reset();
+            window.alert('Empréstimo Registrado com Sucesso!');
+        };
+
+        window.devolverEquipamento = async function (id) {
+            await updateDoc(doc(getPublicCol('emprestimos'), id), {
+                status: 'DEVOLVIDO',
+                dataDevolucao: new Date().toLocaleDateString('pt-BR')
+            });
+        };
+
+        function renderEmprestimosTable() {
+            const tbody = document.getElementById('table-emprestimos-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            emprestimosList.forEach(emp => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-sodexo-blue">${emp.codigoEq}</td>
+                    <td class="p-3">${emp.solicitante}</td>
+                    <td class="p-3 text-xs">${emp.setorAndar}</td>
+                    <td class="p-3 text-xs">${emp.colaboradorAlmox}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-1 text-xs rounded font-bold ${emp.status === 'EMPRESTADO' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
+                            ${emp.status} (${emp.condicao})
+                        </span>
+                    </td>
+                    <td class="p-3 text-right">
+                        ${emp.status === 'EMPRESTADO' ? `<button type="button" onclick="devolverEquipamento('${emp.id}')" class="bg-sodexo-blue text-white px-3 py-1 rounded text-xs font-bold hover:bg-sodexo-darkBlue">Registrar Devolução</button>` : `<span class="text-xs text-gray-400">Devolvido em ${emp.dataDevolucao || ''}</span>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // PEDIDOS
+        window.handlePedidoMatriz = async function (e) {
+            e.preventDefault();
+            const id = 'ped-' + Date.now();
+            const data = {
+                ccOrigem: currentUser ? currentUser.nome : 'CC Solicitante',
+                item: document.getElementById('ped-item').value,
+                qtd: Number(document.getElementById('ped-qtd').value),
+                status: 'PENDENTE_SEPARACAO',
+                dataPedido: new Date().toLocaleDateString('pt-BR')
+            };
+
+            await setDoc(doc(getPublicCol('pedidos'), id), data);
+            document.getElementById('form-pedido-matriz').reset();
+            window.alert('Pedido de separação enviado!');
+        };
+
+        window.atenderPedido = async function (id) {
+            await updateDoc(doc(getPublicCol('pedidos'), id), {
+                status: 'ATENDIDO'
+            });
+        };
+
+        function renderPedidosTable() {
+            const tbody = document.getElementById('table-pedidos-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            pedidosList.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-sodexo-blue">${p.ccOrigem}</td>
+                    <td class="p-3">${p.item}</td>
+                    <td class="p-3 font-bold">${p.qtd}</td>
+                    <td class="p-3"><span class="px-2 py-1 text-xs rounded font-bold ${p.status === 'PENDENTE_SEPARACAO' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${p.status}</span></td>
+                    <td class="p-3 text-right">
+                        ${p.status === 'PENDENTE_SEPARACAO' ? `<button type="button" onclick="atenderPedido('${p.id}')" class="bg-sodexo-red text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">Confirmar Separação</button>` : `<span class="text-xs text-gray-400">Concluído</span>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // LAVANDERIA MANAGEMENT
+        window.handleLavanderiaSubmit = async function (e) {
+            e.preventDefault();
+            const id = 'lav-' + Date.now();
+            const qtdEnviada = Number(document.getElementById('lav-qtd').value);
+            const data = {
+                item: document.getElementById('lav-item').value,
+                qtd: qtdEnviada,
+                qtdEnviada: qtdEnviada,
+                qtdRetornada: null,
+                divergencia: false,
+                centroCusto: document.getElementById('lav-cc').value,
+                fornecedor: document.getElementById('lav-fornecedor').value,
+                responsavel: document.getElementById('lav-resp').value,
+                status: 'EM_LAVAGEM',
+                dataEnvio: new Date().toLocaleDateString('pt-BR')
+            };
+
+            await setDoc(doc(getPublicCol('lavanderia'), id), data);
+            document.getElementById('form-lavanderia').reset();
+            window.alert('Lote enviado para a lavanderia registrado com sucesso!');
+        };
+
+        window.abrirModalRecebimentoLavanderia = function (id) {
+            const item = lavanderiaList.find(l => l.id === id);
+            if (!item) return;
+
+            document.getElementById('lav-receber-id').value = id;
+            document.getElementById('lav-info-item').textContent = `Item: ${item.item}`;
+            document.getElementById('lav-info-qtd-enviada').textContent = `Quantidade Enviada: ${item.qtdEnviada || item.qtd} peça(s)`;
+            document.getElementById('lav-qtd-retornada').value = item.qtdEnviada || item.qtd;
+            document.getElementById('modal-receber-lavanderia').classList.remove('hidden');
+        };
+
+        window.closeLavanderiaModal = function () {
+            document.getElementById('modal-receber-lavanderia').classList.add('hidden');
+        };
+
+        window.confirmarRecebimentoLavanderia = async function (e) {
+            e.preventDefault();
+            const id = document.getElementById('lav-receber-id').value;
+            const item = lavanderiaList.find(l => l.id === id);
+            if (!item) return;
+
+            const qtdEnviada = item.qtdEnviada || item.qtd;
+            const qtdRetornada = Number(document.getElementById('lav-qtd-retornada').value);
+            const statusRetorno = document.getElementById('lav-status-retorno').value;
+            const obs = document.getElementById('lav-obs').value;
+
+            const temDivergencia = qtdRetornada < qtdEnviada;
+
+            await updateDoc(doc(getPublicCol('lavanderia'), id), {
+                status: statusRetorno,
+                qtdRetornada: qtdRetornada,
+                divergencia: temDivergencia,
+                qtdFaltante: temDivergencia ? (qtdEnviada - qtdRetornada) : 0,
+                observacao: obs,
+                dataRetorno: new Date().toLocaleDateString('pt-BR')
+            });
+
+            closeLavanderiaModal();
+
+            if (temDivergencia) {
+                window.alert(`⚠️ ALERTA DE DIVERGÊNCIA: Quantidade retornada (${qtdRetornada}) é MENOR que a enviada (${qtdEnviada}). Faltam ${qtdEnviada - qtdRetornada} peças! O item foi sinalizado.`);
+            } else {
+                window.alert('Recebimento de lavanderia gravado com sucesso!');
+            }
+        };
+
+        function renderLavanderiaTable() {
+            const tbody = document.getElementById('table-lavanderia-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            lavanderiaList.forEach(item => {
+                const tr = document.createElement('tr');
+                const qtdEnviada = item.qtdEnviada || item.qtd;
+                const qtdRetornada = item.qtdRetornada !== null && item.qtdRetornada !== undefined ? item.qtdRetornada : '-';
+
+                let badgeClass = 'bg-blue-100 text-blue-800';
+                let statusLabel = 'Em Lavagem';
+
+                if (item.status === 'DEVOLVIDO_LIMPO') {
+                    badgeClass = 'bg-green-100 text-green-800';
+                    statusLabel = 'Retornado / Limpo';
+                } else if (item.status === 'AVARIADO_DESCARTE') {
+                    badgeClass = 'bg-red-100 text-red-800';
+                    statusLabel = 'Avariado / Baixa';
+                }
+
+                let sinalizadorHtml = `<span class="px-2 py-1 text-xs rounded font-bold ${badgeClass}">${statusLabel}</span>`;
+                if (item.divergencia || (item.qtdRetornada !== null && Number(item.qtdRetornada) < Number(qtdEnviada))) {
+                    const faltam = qtdEnviada - (item.qtdRetornada || 0);
+                    sinalizadorHtml += `
+                        <div class="mt-1 px-2 py-1 text-xs bg-red-100 text-sodexo-red border border-red-300 rounded font-black flex items-center gap-1 animate-pulse">
+                            <i class="fa-solid fa-triangle-exclamation text-sodexo-red"></i> DIVERGÊNCIA: Faltam ${faltam} pçs!
+                        </div>
+                    `;
+                }
+
+                tr.innerHTML = `
+                    <td class="p-3 text-xs font-semibold">${item.dataEnvio}</td>
+                    <td class="p-3 font-bold text-sodexo-blue">${item.item}</td>
+                    <td class="p-3 font-bold text-center">${qtdEnviada}</td>
+                    <td class="p-3 font-bold text-center ${item.divergencia ? 'text-sodexo-red font-black' : ''}">${qtdRetornada}</td>
+                    <td class="p-3 text-xs">${item.centroCusto}</td>
+                    <td class="p-3 text-xs">${item.fornecedor}</td>
+                    <td class="p-3">${sinalizadorHtml}</td>
+                    <td class="p-3 text-right">
+                        ${item.status === 'EM_LAVAGEM' ? `
+                            <button type="button" onclick="abrirModalRecebimentoLavanderia('${item.id}')" class="bg-sodexo-blue text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sodexo-darkBlue shadow">
+                                <i class="fa-solid fa-box-open mr-1"></i> Conferir / Receber
+                            </button>
+                        ` : `
+                            <div class="text-right">
+                                <span class="text-xs text-gray-400 block">Finalizado (${item.dataRetorno || ''})</span>
+                                ${item.observacao ? `<span class="text-xs italic text-gray-500 block">Obs: ${item.observacao}</span>` : ''}
+                            </div>
+                        `}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateLavanderiaKPIs() {
+            const pendente = lavanderiaList.filter(l => l.status === 'EM_LAVAGEM').reduce((acc, curr) => acc + (curr.qtdEnviada || curr.qtd || 0), 0);
+            const limpas = lavanderiaList.filter(l => l.status === 'DEVOLVIDO_LIMPO').reduce((acc, curr) => acc + (curr.qtdRetornada || 0), 0);
+            const avariadas = lavanderiaList.filter(l => l.status === 'AVARIADO_DESCARTE').reduce((acc, curr) => acc + (curr.qtdRetornada || 0), 0);
+            const divergenciasCount = lavanderiaList.filter(l => l.divergencia || (l.qtdRetornada !== null && l.qtdRetornada < (l.qtdEnviada || l.qtd))).length;
+
+            const elP = document.getElementById('kpi-lav-pendente');
+            const elL = document.getElementById('kpi-lav-limpas');
+            const elA = document.getElementById('kpi-lav-avariadas');
+            const elD = document.getElementById('kpi-lav-divergencias');
+
+            if (elP) elP.textContent = pendente;
+            if (elL) elL.textContent = limpas;
+            if (elA) elA.textContent = avariadas;
+            if (elD) elD.textContent = divergenciasCount;
+        }
+
+        window.exportLavanderiaPDF = function () {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            pdf.setFontSize(16);
+            pdf.setTextColor(15, 42, 74);
+            pdf.text("SODEXO - RELATÓRIO DE DIVERGÊNCIAS DA LAVANDERIA", 14, 15);
+
+            pdf.setFontSize(10);
+            pdf.setTextColor(100);
+            pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')} | Emissor: ${currentUser ? currentUser.nome : 'Sistema'}`, 14, 22);
+
+            let y = 32;
+            pdf.setDrawColor(200);
+            pdf.line(14, y, 196, y);
+            y += 8;
+
+            const divergencias = lavanderiaList.filter(l => l.divergencia || (l.qtdRetornada !== null && l.qtdRetornada < (l.qtdEnviada || l.qtd)));
+
+            if (divergencias.length === 0) {
+                pdf.setFontSize(11);
+                pdf.setTextColor(34, 197, 94);
+                pdf.text("Nenhuma divergência registrada no controle de lavanderia.", 14, y);
+            } else {
+                pdf.setFontSize(12);
+                pdf.setTextColor(237, 28, 36);
+                pdf.text(`TOTAL DE LOTES COM DIVERGÊNCIA DE QUANTIDADE: ${divergencias.length}`, 14, y);
+                y += 10;
+
+                divergencias.forEach((d, idx) => {
+                    if (y > 270) {
+                        pdf.addPage();
+                        y = 20;
+                    }
+
+                    const enviada = d.qtdEnviada || d.qtd;
+                    const retornada = d.qtdRetornada || 0;
+                    const faltantes = enviada - retornada;
+
+                    pdf.setFontSize(10);
+                    pdf.setTextColor(15, 42, 74);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text(`${idx + 1}. Item: ${d.item} (Centro de Custo: ${d.centroCusto})`, 14, y);
+                    y += 5;
+
+                    pdf.setFont(undefined, 'normal');
+                    pdf.setTextColor(80);
+                    pdf.text(`   Data Envio: ${d.dataEnvio} | Retorno: ${d.dataRetorno || 'Pendente'} | Fornecedor: ${d.fornecedor}`, 14, y);
+                    y += 5;
+
+                    pdf.setTextColor(237, 28, 36);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text(`   Enviadas: ${enviada} pçs | Retornadas: ${retornada} pçs ---> FALTAM: ${faltantes} PEÇAS`, 14, y);
+                    y += 5;
+
+                    if (d.observacao) {
+                        pdf.setFont(undefined, 'italic');
+                        pdf.setTextColor(100);
+                        pdf.text(`   Observação/Motivo: ${d.observacao}`, 14, y);
+                        y += 5;
+                    }
+
+                    y += 4;
+                    pdf.setDrawColor(230);
+                    pdf.line(14, y, 196, y);
+                    y += 6;
+                });
+            }
+
+            pdf.save(`Relatorio_Divergencias_Lavanderia_${Date.now()}.pdf`);
+        };
+
+        function populateCCOptions() {
+            const select = document.getElementById('mov-cc');
+            const lavSelect = document.getElementById('lav-cc');
+
+            if (select) {
+                select.innerHTML = '';
+                usersList.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.nome;
+                    opt.textContent = u.nome;
+                    select.appendChild(opt);
+                });
+            }
+
+            if (lavSelect) {
+                lavSelect.innerHTML = '';
+                usersList.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.nome;
+                    opt.textContent = u.nome;
+                    lavSelect.appendChild(opt);
+                });
+            }
+
+            const originInput = document.getElementById('ped-cc-origem');
+            if (originInput && currentUser) {
+                originInput.value = currentUser.nome;
+            }
+        }
+
+        // DASHBOARD PERIOD FILTER & CHARTS
+        window.setDashboardFilter = function (period) {
+            currentFilterPeriod = period;
+            ['semanal', 'mensal', 'anual'].forEach(p => {
+                const btn = document.getElementById(`btn-filt-${p}`);
+                if (btn) {
+                    if (p === period) {
+                        btn.classList.add('bg-sodexo-blue', 'text-white');
+                        btn.classList.remove('text-sodexo-blue');
+                    } else {
+                        btn.classList.remove('bg-sodexo-blue', 'text-white');
+                        btn.classList.add('text-sodexo-blue');
+                    }
+                }
+            });
+            updateDashboardCharts();
+        };
+
+        function updateDashboardCharts() {
+            const totalMov = movimentacoesList.length;
+            const entradas = movimentacoesList.filter(m => m.tipo === 'ENTRADA').length;
+            const saidas = movimentacoesList.filter(m => m.tipo === 'SAIDA').length;
+            const empAtivos = emprestimosList.filter(e => e.status === 'EMPRESTADO').length;
+
+            const elTotal = document.getElementById('kpi-mov-total');
+            const elEntradas = document.getElementById('kpi-entradas');
+            const elSaidas = document.getElementById('kpi-saidas');
+            const elEmp = document.getElementById('kpi-emprestimos');
+
+            if (elTotal) elTotal.textContent = totalMov;
+            if (elEntradas) elEntradas.textContent = entradas;
+            if (elSaidas) elSaidas.textContent = saidas;
+            if (elEmp) elEmp.textContent = empAtivos;
+
+            const ccData = {};
+            movimentacoesList.forEach(m => {
+                const cc = m.centroCusto || 'Geral';
+                ccData[cc] = (ccData[cc] || 0) + m.qtd;
+            });
+
+            const ctx1 = document.getElementById('chartConsumoCC');
+            if (ctx1) {
+                if (chartConsumoInstance) chartConsumoInstance.destroy();
+                chartConsumoInstance = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(ccData).length ? Object.keys(ccData) : ['Sem dados'],
+                        datasets: [{
+                            label: 'Volume de Consumo / Movimentação',
+                            data: Object.values(ccData).length ? Object.values(ccData) : [0],
+                            backgroundColor: '#0F2A4A'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            const ctx2 = document.getElementById('chartEntradaSaida');
+            if (ctx2) {
+                if (chartEntradaSaidaInstance) chartEntradaSaidaInstance.destroy();
+                chartEntradaSaidaInstance = new Chart(ctx2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Entradas', 'Saídas'],
+                        datasets: [{
+                            data: [entradas, saidas],
+                            backgroundColor: ['#22c55e', '#ED1C24']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+        }
+
+        // EXPORT TO PDF
+        window.exportPagePDF = function () {
+            const { jsPDF } = window.jspdf;
+            const element = document.getElementById('pdf-export-area');
+
+            if (!element) return;
+
+            html2canvas(element).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                pdf.setFontSize(16);
+                pdf.setTextColor(15, 42, 74);
+                pdf.text("RELATÓRIO DE CONSUMO E MOVIMENTAÇÃO - SODEXO", 14, 15);
+                pdf.setFontSize(10);
+                pdf.text(`Período de Seleção: ${currentFilterPeriod.toUpperCase()} | Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 22);
+                pdf.addImage(imgData, 'PNG', 14, 30, 260, 120);
+                pdf.save(`Relatorio_Sodexo_${currentFilterPeriod}.pdf`);
+            });
+        };
+    </script>
+</body>
+</html>
