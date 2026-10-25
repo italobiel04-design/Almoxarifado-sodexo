@@ -659,24 +659,27 @@
 
     <!-- FIREBASE & APPLICATION LOGIC -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase Config
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sodexo-almoxarifado-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "demo-api-key",
-            authDomain: "demo-app.firebaseapp.com",
-            projectId: "demo-app",
-            storageBucket: "demo-app.appspot.com",
-            messagingSenderId: "00000000000",
-            appId: "1:00000000000:web:00000000000"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Camada de sincronização com o Netlify Database (via /api/data)
+        const getPublicCol = (colName) => colName;
+        const doc = (col, id) => ({ col, id });
+        async function api(payload) {
+            const res = await fetch('/api/data', {
+                method: payload ? 'POST' : 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload ? JSON.stringify(payload) : undefined,
+                cache: 'no-store'
+            });
+            const out = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (payload) window.alert('Erro de sincronização: ' + (out.error || res.status));
+                throw new Error(out.error || 'Erro de sincronização');
+            }
+            applyState(out);
+            return out;
+        }
+        const setDoc = (ref, data, opts = {}) => api({ op: 'set', col: ref.col, id: ref.id, data, merge: !!opts.merge });
+        const updateDoc = (ref, data) => api({ op: 'update', col: ref.col, id: ref.id, data });
+        const deleteDoc = (ref) => api({ op: 'delete', col: ref.col, id: ref.id });
 
         // State
         let currentUser = null;
@@ -692,7 +695,6 @@
         let chartConsumoInstance = null;
         let chartEntradaSaidaInstance = null;
 
-        const getPublicCol = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
 
         // Default initial users
         const defaultUsers = [
@@ -702,73 +704,40 @@
             { id: 'usr-cc-obra', nome: 'Centro Custo - Operação Norte', perfil: 'CENTRO_CUSTO', senha: '123', permEntradaSaida: true, permPedidos: true, permEmprestimo: true }
         ];
 
-        window.addEventListener('DOMContentLoaded', async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.warn("Auth Fallback Active");
-            }
-            initSync();
-        });
-
-        function initSync() {
-            // Sync Users
-            onSnapshot(getPublicCol('usuarios'), (snap) => {
-                if (snap.empty) {
-                    defaultUsers.forEach(u => setDoc(doc(getPublicCol('usuarios'), u.id), u));
-                } else {
-                    usersList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    renderUsersSelect();
-                    renderUsersPermissionsTable();
-                    renderRhTable();
-                    populateCCOptions();
-                }
-            }, err => console.log('Users sync alert:', err));
-
-            // Sync RH Records
-            onSnapshot(getPublicCol('rh'), (snap) => {
-                rhList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderRhTable();
-            }, err => console.log('RH sync alert:', err));
-
-            // Sync Products
-            onSnapshot(getPublicCol('produtos'), (snap) => {
-                productsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderProductsTable();
-                checkSmartAlerts();
-            }, err => console.log('Products sync alert:', err));
-
-            // Sync Movimentações
-            onSnapshot(getPublicCol('movimentacoes'), (snap) => {
-                movimentacoesList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                updateDashboardCharts();
-            }, err => console.log('Mov sync alert:', err));
-
-            // Sync Empréstimos
-            onSnapshot(getPublicCol('emprestimos'), (snap) => {
-                emprestimosList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderEmprestimosTable();
-                updateDashboardCharts();
-                checkSmartAlerts();
-            }, err => console.log('Emp sync alert:', err));
-
-            // Sync Pedidos
-            onSnapshot(getPublicCol('pedidos'), (snap) => {
-                pedidosList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderPedidosTable();
-            }, err => console.log('Ped sync alert:', err));
-
-            // Sync Lavanderia
-            onSnapshot(getPublicCol('lavanderia'), (snap) => {
-                lavanderiaList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderLavanderiaTable();
-                updateLavanderiaKPIs();
-            }, err => console.log('Lavanderia sync alert:', err));
+        function applyState(st) {
+            if (!st || !st.usuarios) return;
+            usersList = st.usuarios; rhList = st.rh; productsList = st.produtos;
+            movimentacoesList = st.movimentacoes; emprestimosList = st.emprestimos;
+            pedidosList = st.pedidos; lavanderiaList = st.lavanderia;
+            const sel = document.getElementById('login-user-select');
+            const selVal = sel ? sel.value : '';
+            renderUsersSelect();
+            if (sel) sel.value = selVal;
+            renderUsersPermissionsTable();
+            renderRhTable();
+            if (!document.querySelector('.modal-open-guard')) populateCCOptionsKeep();
+            renderProductsTable();
+            renderEmprestimosTable();
+            renderPedidosTable();
+            renderLavanderiaTable();
+            updateLavanderiaKPIs();
+            checkSmartAlerts();
+            const dash = document.getElementById('view-gestao-dashboard');
+            if (dash && !dash.classList.contains('hidden')) updateDashboardCharts();
         }
+
+        function populateCCOptionsKeep() {
+            const a = document.getElementById('mov-cc'), b = document.getElementById('lav-cc');
+            const va = a ? a.value : '', vb = b ? b.value : '';
+            populateCCOptions();
+            if (a && va) a.value = va;
+            if (b && vb) b.value = vb;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            api().catch(err => console.warn('Sync inicial falhou:', err));
+            setInterval(() => { if (!document.hidden) api().catch(() => {}); }, 5000);
+        });
 
         // V4.0: MOTOR DE ALERTAS INTELIGENTES (Atraso 12h + Estoque Mínimo)
         function checkSmartAlerts() {
